@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 
 #define true 1
@@ -16,6 +17,10 @@
 #define MIN_CONNECT 3
 #define MAX_CONNECT 6
 
+void createRoomFile( char* filepath, int roomNum,  char* type, char** names, int connections[][TOTAL_ROOMS]);
+
+const char* hardCodeNames = "Gate Keep Dungeon Tower Turret Sewers Throne Jailcell Court Vault";
+
 int main (void) {
 
 	int i, j, counter;
@@ -23,13 +28,12 @@ int main (void) {
 	time_t t;
 	srand( (unsigned) time(&t));
 
+	//graph for connections
 	int connections [TOTAL_ROOMS][TOTAL_ROOMS];
-
 	memset(connections, false, (TOTAL_ROOMS * TOTAL_ROOMS) * sizeof(int) );	
 
-	//randomly fill connections
+//randomly fill connections
 	int isComplete = false;
-	
 	while ( isComplete == false ) {
 
 		//create random connection
@@ -54,9 +58,8 @@ int main (void) {
 	}
 	
 	 
-  //randomly assign names
-	char* hardCodeNames = "Gate Keep Dungeon Tower Turret Sewers Throne Kitchen Court Vault";
-	char* randomRooms[10];
+//randomly assign names
+	char* randomNames[10];
 
 	//copy string literal hardCodeNames so we can tokenize it
 	char* roomNames = malloc( (strlen(hardCodeNames) + 1) * sizeof(char) );
@@ -66,8 +69,8 @@ int main (void) {
 	//convert roomsNames string to array of name
 	for( i = 0; i < 10; i++) {
 
-	randomRooms[i] = malloc( (strlen(token) + 1) * sizeof(char) );
-		strcpy( randomRooms[i], token);
+	randomNames[i] = malloc( (strlen(token) + 1) * sizeof(char) );
+		strcpy( randomNames[i], token);
 		token = strtok(NULL, " ");
 	}
 
@@ -76,13 +79,13 @@ int main (void) {
 	char* tempString;
 	for( i = 10; i > 0; i-- ) {
 		randomIndex = rand() %  i ;
-		tempString = randomRooms[randomIndex];
-		randomRooms[randomIndex] = randomRooms[ i - 1 ];
-		randomRooms[ i - 1 ] = tempString;
+		tempString = randomNames[randomIndex];
+		randomNames[randomIndex] = randomNames[ i - 1 ];
+		randomNames[ i - 1 ] = tempString;
 	}
 
 
-//TEST PRINT
+/*//TEST PRINT
 	for (i=0; i<TOTAL_ROOMS; i++) {
 		for (j=0; j<TOTAL_ROOMS; j++){
 			printf("%d ", connections[i][j]);
@@ -93,21 +96,83 @@ int main (void) {
 	printf("%s\n", hardCodeNames);
 
 	for (i=0; i<10; i++) { 
-		printf("%s ", randomRooms[i]);
+		printf("%s ", randomNames[i]);
 	}
 	
 	printf("\n\n");
+//END TEST PRINT
+*/
 
-	//save rooms as files.
+//save rooms as file
+	
+	//create directory
+	char* directory = NULL;
+	asprintf( &directory, "kellandr.rooms.%d", getpid());
 
-		//set room types for first and last room
+	mkdir( directory, 0755);
 
-	//free randomrooms
+	char* filepath = NULL;
+	
+	//do START_ROOM
+	asprintf( &filepath, "%s/%s", directory, randomNames[0]);
+	createRoomFile( filepath, 0, "START_ROOM", randomNames, connections); 
+	free(filepath);
 
+	//loop through MID_ROOMs
+	for( i=1; i<TOTAL_ROOMS - 1; i++) {
+		asprintf( &filepath, "%s/%s", directory, randomNames[i]);
+		createRoomFile( filepath, i, "MID_ROOM", randomNames, connections); 
+		free(filepath);
+	}
+
+	//last room is END_ROOM
+	asprintf( &filepath, "%s/%s", directory, randomNames[TOTAL_ROOMS - 1]);
+	createRoomFile( filepath, TOTAL_ROOMS - 1, "END_ROOM", randomNames, connections); 
+	free(filepath);
+
+	//free memory
+	free(directory);
+	for (i=0; i<10; i++){ free(randomNames[i]); }
 	free(roomNames);
 
 	return 0;
 }
 
 
+//write roomfile 
+void createRoomFile( char* filepath, int roomNum,  char* type, char** names, int connections[][TOTAL_ROOMS]) {
+
+	//open file for writing	
+	int fileDescriptor;
+	fileDescriptor = open( filepath, O_WRONLY | O_CREAT | O_TRUNC, 0755 );
+	
+	if ( fileDescriptor < 0 ){
+		fprintf(stderr, "Could not open %s\n", filepath );
+		perror("Error in createRoomFile()");
+		exit(1);
+	}
+
+	char* writeLine = NULL;
+	
+	asprintf( &writeLine, "ROOM NAME: %s\n", names[roomNum] );
+	write(fileDescriptor, writeLine, strlen(writeLine) * sizeof(char) );
+	free(writeLine);
+
+	int i;
+	int counter = 1;
+	for( i=0; i < TOTAL_ROOMS ; i++) {
+		if( i != roomNum && connections[roomNum][i] ) {
+			asprintf( &writeLine, "CONNECTION %d: %s\n", counter, names[i] );
+			write(fileDescriptor, writeLine, strlen(writeLine) * sizeof(char) );
+			free(writeLine);
+			counter++;
+		}
+	}
+	
+	asprintf( &writeLine, "ROOM TYPE: %s\n", type );
+	write(fileDescriptor, writeLine, strlen(writeLine) * sizeof(char) );
+	free(writeLine);
+
+	close(fileDescriptor);
+}
 
