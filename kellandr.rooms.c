@@ -85,26 +85,9 @@ int main (void) {
 	}
 
 
-/*//TEST PRINT
-	for (i=0; i<TOTAL_ROOMS; i++) {
-		for (j=0; j<TOTAL_ROOMS; j++){
-			printf("%d ", connections[i][j]);
-		}
-		printf("\n");
-	}
 
-	printf("%s\n", hardCodeNames);
+//save rooms as files
 
-	for (i=0; i<10; i++) { 
-		printf("%s ", randomNames[i]);
-	}
-	
-	printf("\n\n");
-//END TEST PRINT
-*/
-
-//save rooms as file
-	
 	//create directory
 	char* directory = NULL;
 	asprintf( &directory, "kellandr.rooms.%d", getpid());
@@ -138,6 +121,8 @@ int main (void) {
 	return 0;
 }
 
+
+/* --------------------------- FUNCTIONS -------------------------- */
 
 //write roomfile 
 void createRoomFile( char* filepath, int roomNum,  char* type, char** names, int connections[][TOTAL_ROOMS]) {
