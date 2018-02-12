@@ -31,6 +31,7 @@ struct Room {
 
 //prototypes
 char* readRoomFile( char* filepath);
+void printRoom(struct Room* room) ;
 void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) ;
 
 int main(void) {
@@ -78,7 +79,6 @@ int main(void) {
 		int roomIndex = 0;
 		
 		while  ( (fileInDir = readdir(readingDir)) != NULL ) {	//read through files in curent dir
-
 			//makesure we're not reading ./ or ../ and add room
 			if( strchr(fileInDir->d_name, '.') == NULL ) {
 				rooms[roomIndex] = malloc(sizeof(struct Room));
@@ -90,7 +90,7 @@ int main(void) {
 	
 	
 	//read each room info into memory
-	int i,j;
+	int i;
 	char filepath[256];
 	char* roomFileString;
 	for(i=0; i<TOTAL_ROOMS; i++) {
@@ -103,11 +103,59 @@ int main(void) {
 	}
 
 
+    //get start room
+    struct Room* currentRoom;
+    for( i=0; i<TOTAL_ROOMS; i++) {
+        currentRoom = rooms[i];
+        if ( strcmp(currentRoom->type, "START_ROOM") )
+            break;
+    }
+
 	//play game
+	char* userInput = NULL;
+    size_t maxBuffer = 256;
+    struct Room* nextRoom;
+    int steps = 0;
+	struct Room* path[256];
+
+    while( strcmp( currentRoom->type, "END_ROOM") != 0 ) {
+
+        printRoom(currentRoom);
+        
+        getline( &userInput, &maxBuffer, stdin);
+        //scrub trailing \n from input
+        userInput[ strlen(userInput) - 1 ] = '\0';
+        
+        //find room connection by name
+		nextRoom = NULL;
+        for( i=0; i<TOTAL_ROOMS; i++) {
+            if ( currentRoom->connections[i] != NULL) {
+                if( strcmp( currentRoom->connections[i]->name, userInput) == 0 ) {
+                    nextRoom = currentRoom->connections[i];
+                    break;
+                }
+            }
+		}
+        if ( nextRoom == NULL ) {
+            printf("\nHUH? I DON’T UNDERSTAND THAT ROOM. TRY AGAIN.\n");
+        }
+        else {
+            currentRoom = nextRoom;
+            path[steps] = currentRoom;
+            steps++;
+        }
+        printf("\n");
+    }
+
+	printf("YOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
+	printf("YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:", steps);
+	for( i=0; i<steps; i++) {
+		printf("\n%s", path[i]->name);
 	}
 
-	
-	for( i=0; i<TOTAL_ROOMS; i++) {
+    //free memory
+	free (userInput);
+    for( i=0; i<TOTAL_ROOMS; i++) {
 		free(rooms[i]);
 	}
 	printf("\n");
@@ -117,7 +165,24 @@ int main(void) {
 }
 
 
+
 /* --------------------------- FUNCTIONS -------------------------- */
+
+
+void printRoom(struct Room* room) {
+    
+    printf("CURRENT LOCATION: %s\nPOSSIBLE CONNECTIONS: %s", room->name, room->connections[0]->name);
+
+    int i=1;
+
+    while( room->connections[i] != NULL ) {
+        printf(", %s", room->connections[i]->name);
+        i++;
+    }
+
+    printf(".\nWHERE TO? >");
+}
+
 
 void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) {
 
