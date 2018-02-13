@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <dirent.h>
@@ -30,6 +31,7 @@ struct Room {
 };
 
 //prototypes
+void writeTime();
 char* readRoomFile( char* filepath);
 void printRoom(struct Room* room) ;
 void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) ;
@@ -118,14 +120,23 @@ int main(void) {
     int steps = 0;
 	struct Room* path[256];
 
+    printRoom(currentRoom);
+    
     while( strcmp( currentRoom->type, "END_ROOM") != 0 ) {
-
-        printRoom(currentRoom);
+        
+        printf(".\nWHERE TO? >");
         
         getline( &userInput, &maxBuffer, stdin);
         //scrub trailing \n from input
         userInput[ strlen(userInput) - 1 ] = '\0';
         
+        if( strcmp( userInput, "time") == 0 ) {
+            //create a thread that records and prints time
+            writeTime();
+            //lock time output file
+            continue;
+        }
+
         //find room connection by name
 		nextRoom = NULL;
         for( i=0; i<TOTAL_ROOMS; i++) {
@@ -143,6 +154,10 @@ int main(void) {
             currentRoom = nextRoom;
             path[steps] = currentRoom;
             steps++;
+            
+            if ( strcmp( currentRoom->type, "END_ROOM") != 0 ) {
+                printRoom(currentRoom);
+            }
         }
         printf("\n");
     }
@@ -168,9 +183,49 @@ int main(void) {
 
 /* --------------------------- FUNCTIONS -------------------------- */
 
+//open a file and write it the time to it
+void writeTime(){
 
-void printRoom(struct Room* room) {
+    time_t t;
+    struct tm *tmp;
     
+    t = time(NULL);
+    tmp = localtime(&t);
+    
+    if (tmp == NULL) {
+       perror("localtime");
+       exit(EXIT_FAILURE);        
+    }
+
+    char timeString[256];
+
+    if( strftime( timeString, sizeof(timeString), "%I:%M%p, %A, %B, %e, %G\n" , tmp) == 0 ) {
+        fprintf(stderr, "strftime returned 0");
+        exit(EXIT_FAILURE);
+    }
+    
+    
+    char* fileName = "currentTime.txt";
+
+    int fileDesc = open( fileName, O_WRONLY | O_TRUNC | O_CREAT, 0755);
+
+    if ( fileDesc < 0 ){
+        fprintf(stderr, "Could not open %s\n", fileName );
+        perror("Error in writeTime()");
+        exit(1);
+    }
+
+    write( fileDesc, timeString, strlen(timeString) * sizeof(char));
+
+    close( fileDesc );
+
+//TODO: DELETE THIS:
+printf("%s",timeString);
+}
+
+
+//print the current room location and connections
+void printRoom(struct Room* room) {    
     printf("CURRENT LOCATION: %s\nPOSSIBLE CONNECTIONS: %s", room->name, room->connections[0]->name);
 
     int i=1;
@@ -179,11 +234,10 @@ void printRoom(struct Room* room) {
         printf(", %s", room->connections[i]->name);
         i++;
     }
-
-    printf(".\nWHERE TO? >");
 }
 
 
+//  Adds the connections and room type to a Room struct from a string
 void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) {
 
 	int i;
@@ -228,7 +282,7 @@ void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) {
 }
 
 
-//read roomfile
+//read roomfile and return it as a string
 char* readRoomFile( char* filepath){
 
 	int fileDescriptor;
