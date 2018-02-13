@@ -32,78 +32,15 @@ struct Room {
 
 //prototypes
 void writeTime();
-char* readRoomFile( char* filepath);
+void buildAdventureRooms(struct Room* rooms[]);
 void printRoom(struct Room* room) ;
-void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) ;
 
 int main(void) {
-
-	//find most recent rooms directory
-	int latestTime = -1;
-	char roomDirPrefix[] = "kellandr.rooms.";
-	char roomDir[256] = {'\0'};	
-
-	DIR* readingDir;
-	struct dirent *fileInDir;
-	struct stat dirAttributes;
-
-	//open current directory
-	readingDir = opendir(".");
-	if ( readingDir > 0 ) {
-		//read through files in curent dir
-		while  ( (fileInDir = readdir(readingDir)) != NULL ) {
-	
-			//if the directory has our desired prefix
-			if ( strstr( fileInDir->d_name, roomDirPrefix) != NULL ) {
-				stat( fileInDir->d_name, &dirAttributes );
-				
-				//get the latest directory
-				if( (int)dirAttributes.st_mtime > latestTime ) {
-					latestTime = (int)dirAttributes.st_mtime;
-					memset(roomDir, '\0', sizeof(roomDir));
-					strcpy(roomDir, fileInDir->d_name);
-				}
-			}
-		}
-	}
-	else {		//exit if no rooms directory was found
-		//TODO
-	}
-	closedir(readingDir);
-
-
+    
+    int i;
 	struct Room* rooms[TOTAL_ROOMS] = {NULL};
-	
-	//add room structs to rooms[] for each file in roomDir
-	readingDir = opendir(roomDir);
-	if ( readingDir > 0 ) {
-	
-		int roomIndex = 0;
-		
-		while  ( (fileInDir = readdir(readingDir)) != NULL ) {	//read through files in curent dir
-			//makesure we're not reading ./ or ../ and add room
-			if( strchr(fileInDir->d_name, '.') == NULL ) {
-				rooms[roomIndex] = malloc(sizeof(struct Room));
-				strcpy( rooms[roomIndex]->name, fileInDir->d_name );
-				roomIndex++;
-			}	
-		}
-	}
-	
-	
-	//read each room info into memory
-	int i;
-	char filepath[256];
-	char* roomFileString;
-	for(i=0; i<TOTAL_ROOMS; i++) {
-		strcpy( filepath, roomDir );
-		strcat( filepath, "/");
-		strcat( filepath, rooms[i]->name );
-		roomFileString = readRoomFile(filepath);
-		addRoomDetails( roomFileString, rooms, rooms[i] );
-		free(roomFileString);
-	}
 
+    buildAdventureRooms(rooms);
 
     //get start room
     struct Room* currentRoom;
@@ -124,7 +61,7 @@ int main(void) {
     
     while( strcmp( currentRoom->type, "END_ROOM") != 0 ) {
         
-        printf(".\nWHERE TO? >");
+        printf("\nWHERE TO? >");
         
         getline( &userInput, &maxBuffer, stdin);
         //scrub trailing \n from input
@@ -151,6 +88,7 @@ int main(void) {
             printf("\nHUH? I DON’T UNDERSTAND THAT ROOM. TRY AGAIN.\n");
         }
         else {
+            //step into room
             currentRoom = nextRoom;
             path[steps] = currentRoom;
             steps++;
@@ -162,7 +100,8 @@ int main(void) {
         printf("\n");
     }
 
-	printf("YOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
+    
+    printf("YOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
 	printf("YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:", steps);
 	for( i=0; i<steps; i++) {
 		printf("\n%s", path[i]->name);
@@ -182,6 +121,8 @@ int main(void) {
 
 
 /* --------------------------- FUNCTIONS -------------------------- */
+
+
 
 //open a file and write it the time to it
 void writeTime(){
@@ -218,9 +159,6 @@ void writeTime(){
     write( fileDesc, timeString, strlen(timeString) * sizeof(char));
 
     close( fileDesc );
-
-//TODO: DELETE THIS:
-printf("%s",timeString);
 }
 
 
@@ -321,3 +259,71 @@ char* readRoomFile( char* filepath){
 }
 
 
+
+void buildAdventureRooms(struct Room* rooms[]){
+
+    //find most recent rooms directory
+	int latestTime = -1;
+	char roomDirPrefix[] = "kellandr.rooms.";
+	char roomDir[256] = {'\0'};	
+
+	DIR* readingDir;
+	struct dirent *fileInDir;
+	struct stat dirAttributes;
+
+	//open current directory
+	readingDir = opendir(".");
+	if ( readingDir > 0 ) {
+		//read through files in curent dir
+		while  ( (fileInDir = readdir(readingDir)) != NULL ) {
+	
+			//if the directory has our desired prefix
+			if ( strstr( fileInDir->d_name, roomDirPrefix) != NULL ) {
+				stat( fileInDir->d_name, &dirAttributes );
+				
+				//get the latest directory
+				if( (int)dirAttributes.st_mtime > latestTime ) {
+					latestTime = (int)dirAttributes.st_mtime;
+					memset(roomDir, '\0', sizeof(roomDir));
+					strcpy(roomDir, fileInDir->d_name);
+				}
+			}
+		}
+	}
+	else {		//exit if no rooms directory was found
+		fprintf(stderr, "Could not find a rooms directory");
+        exit(1);
+	}
+	closedir(readingDir);
+
+	
+	//add room structs to rooms[] for each file in roomDir
+	readingDir = opendir(roomDir);
+	if ( readingDir > 0 ) {
+	
+		int roomIndex = 0;
+		
+		while  ( (fileInDir = readdir(readingDir)) != NULL ) {	
+			//makesure we're not reading ./ or ../ and add room
+			if( strchr(fileInDir->d_name, '.') == NULL ) {
+				rooms[roomIndex] = malloc(sizeof(struct Room));
+				strcpy( rooms[roomIndex]->name, fileInDir->d_name );
+				roomIndex++;
+			}	
+		}
+	}
+	
+	
+	//read each room info into memory
+	int i;
+	char filepath[256];
+	char* roomFileString;
+	for(i=0; i<TOTAL_ROOMS; i++) {
+		strcpy( filepath, roomDir );
+		strcat( filepath, "/");
+		strcat( filepath, rooms[i]->name );
+		roomFileString = readRoomFile(filepath);
+		addRoomDetails( roomFileString, rooms, rooms[i] );
+		free(roomFileString);
+	}
+}
