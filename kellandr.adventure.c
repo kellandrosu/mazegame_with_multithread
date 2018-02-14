@@ -8,7 +8,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <dirent.h>
@@ -18,10 +17,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
+
 
 #define true 1
 #define false 0
 #define TOTAL_ROOMS 7
+
 
 //definitions
 struct Room {
@@ -29,6 +31,11 @@ struct Room {
 	char type[12];
 	struct Room* connections[TOTAL_ROOMS];
 };
+
+struct FileInfo {
+    char name[256];
+    pthread_mutex_t mutex;
+}
 
 //prototypes
 void writeTime();
@@ -40,37 +47,72 @@ int main(void) {
     int i;
 	struct Room* rooms[TOTAL_ROOMS] = {NULL};
 
+    //populates the rooms array with the random room file info as room structs
     buildAdventureRooms(rooms);
 
-    //get start room
+    //struct that holds the currentTime file name and its associated mutex lock
+    struct FileInfo timeFileInfo;
+      strcpy( timeFileInfo.name, "currentTime.txt");
+      //initialize mutex for createText file
+      timeFileInfo.mutex = PTHREAD_MUTEX_INITIALIZER;
+      pthread_mutex_lock(timeFileInfo.mutex);
+
+    //file descriptor for timeFile
+    int timeFileDesc;
+    char readBuffer[500]; //to read file into
+
+    //start writeTime thread
+    int resultInt;
+    pthread_t timeThread;
+    resultInt = pthread_create( &timeThread, NULL, writeTime, (void*) &timeFileInfo);
+
+	//set up game variables
+	char* userInput = NULL;
+    size_t maxBuffer = 256;
     struct Room* currentRoom;
+    struct Room* nextRoom;
+    int steps = 0;
+	struct Room* path[256];
+    
+    //get start room
     for( i=0; i<TOTAL_ROOMS; i++) {
         currentRoom = rooms[i];
         if ( strcmp(currentRoom->type, "START_ROOM") )
             break;
     }
 
-	//play game
-	char* userInput = NULL;
-    size_t maxBuffer = 256;
-    struct Room* nextRoom;
-    int steps = 0;
-	struct Room* path[256];
-
     printRoom(currentRoom);
-    
+   
+    //play game
     while( strcmp( currentRoom->type, "END_ROOM") != 0 ) {
         
         printf("\nWHERE TO? >");
         
         getline( &userInput, &maxBuffer, stdin);
-        //scrub trailing \n from input
-        userInput[ strlen(userInput) - 1 ] = '\0';
+        
+        userInput[ strlen(userInput) - 1 ] = '\0';  //scrub trailing \n from input
         
         if( strcmp( userInput, "time") == 0 ) {
-            //create a thread that records and prints time
-            writeTime();
-            //lock time output file
+
+            //unlock mutex so writeTim can run
+            pthread_mutex_unlock(timeFileInfo.mutex);
+            
+            //join current thread to writeTime thread so writeTime will execute fully
+            pthread_mutex_join(timeThread, NULL);
+
+            pthread_mutex_lock(timeFileInfo.mutex);
+            
+            //TODO: read currentTime and output time
+            timeFileDesc = open( timeFileInfo.name, O_RDONLY);
+
+            read( timeFileDesc, readBuffer, sizeof(readBuffer));
+            printf(readBuffer);
+
+            close(timeFileDesc);
+            
+            //create new timeThread
+            pthread_create( &timeThread, NULL, writeTime, (void*) &timeFileInfo); 
+            
             continue;
         }
 
@@ -125,40 +167,52 @@ int main(void) {
 
 
 //open a file and write it the time to it
-void writeTime(){
+void writeTime(struct FileInfo* timeFileInfo){
 
     time_t t;
     struct tm *tmp;
-    
-    t = time(NULL);
-    tmp = localtime(&t);
-    
-    if (tmp == NULL) {
-       perror("localtime");
-       exit(EXIT_FAILURE);        
+
+    int lockResult;
+
+    lockResult = pthread_mutex_lock(timeFileInfo->mutex);
+
+    if ( lockResult == 0 ) {
+
+        t = time(NULL);
+        tmp = localtime(&t);
+        
+        if (tmp == NULL) {
+           perror("localtime");
+           exit(EXIT_FAILURE);        
+        }
+
+        char timeString[256];
+
+        if( strftime( timeString, sizeof(timeString), "%I:%M%p, %A, %B, %e, %G\n" , tmp) == 0 ) {
+            fprintf(stderr, "strftime returned 0");
+            exit(EXIT_FAILURE);
+        }
+        
+        
+        int fileDesc = open( timeFileInfo->name, O_WRONLY | O_TRUNC | O_CREAT, 0755);
+
+        if ( fileDesc < 0 ){
+            fprintf(stderr, "Could not open %s\n", fileName );
+            perror("Error in writeTime()");
+            exit(1);
+        }
+
+        write( fileDesc, timeString, strlen(timeString) * sizeof(char));
+
+        close( fileDesc );
+
+        pthread_mutex_unlock(timeFileInfo->mutex);
     }
-
-    char timeString[256];
-
-    if( strftime( timeString, sizeof(timeString), "%I:%M%p, %A, %B, %e, %G\n" , tmp) == 0 ) {
-        fprintf(stderr, "strftime returned 0");
-        exit(EXIT_FAILURE);
+    else {
+        fprintf(stderr, "pthread_mutex_lock(timeFileInfo->mutex) ecnountered error in writeTime()"); 
+        exit(lockResult);
     }
     
-    
-    char* fileName = "currentTime.txt";
-
-    int fileDesc = open( fileName, O_WRONLY | O_TRUNC | O_CREAT, 0755);
-
-    if ( fileDesc < 0 ){
-        fprintf(stderr, "Could not open %s\n", fileName );
-        perror("Error in writeTime()");
-        exit(1);
-    }
-
-    write( fileDesc, timeString, strlen(timeString) * sizeof(char));
-
-    close( fileDesc );
 }
 
 
@@ -260,6 +314,7 @@ char* readRoomFile( char* filepath){
 
 
 
+//builds the adventure rooms from the latest kellandr.rooms.<PROCESS> directory
 void buildAdventureRooms(struct Room* rooms[]){
 
     //find most recent rooms directory
