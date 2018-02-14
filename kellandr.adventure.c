@@ -14,10 +14,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <pthread.h>
+#include <assert.h>
 
 
 #define true 1
@@ -35,10 +33,10 @@ struct Room {
 struct FileInfo {
     char name[256];
     pthread_mutex_t mutex;
-}
+};
 
 //prototypes
-void writeTime();
+void* writeTime(void *);
 void buildAdventureRooms(struct Room* rooms[]);
 void printRoom(struct Room* room) ;
 
@@ -54,8 +52,8 @@ int main(void) {
     struct FileInfo timeFileInfo;
       strcpy( timeFileInfo.name, "currentTime.txt");
       //initialize mutex for createText file
-      timeFileInfo.mutex = PTHREAD_MUTEX_INITIALIZER;
-      pthread_mutex_lock(timeFileInfo.mutex);
+      pthread_mutex_init(&timeFileInfo.mutex, NULL);
+      pthread_mutex_lock(&timeFileInfo.mutex);
 
     //file descriptor for timeFile
     int timeFileDesc;
@@ -65,6 +63,7 @@ int main(void) {
     int resultInt;
     pthread_t timeThread;
     resultInt = pthread_create( &timeThread, NULL, writeTime, (void*) &timeFileInfo);
+    assert(resultInt == 0 );
 
 	//set up game variables
 	char* userInput = NULL;
@@ -95,12 +94,12 @@ int main(void) {
         if( strcmp( userInput, "time") == 0 ) {
 
             //unlock mutex so writeTim can run
-            pthread_mutex_unlock(timeFileInfo.mutex);
+            pthread_mutex_unlock(&timeFileInfo.mutex);
             
             //join current thread to writeTime thread so writeTime will execute fully
-            pthread_mutex_join(timeThread, NULL);
+            pthread_join(timeThread, NULL);
 
-            pthread_mutex_lock(timeFileInfo.mutex);
+            pthread_mutex_lock(&timeFileInfo.mutex);
             
             //TODO: read currentTime and output time
             timeFileDesc = open( timeFileInfo.name, O_RDONLY);
@@ -111,8 +110,10 @@ int main(void) {
             close(timeFileDesc);
             
             //create new timeThread
-            pthread_create( &timeThread, NULL, writeTime, (void*) &timeFileInfo); 
+            resultInt = pthread_create( &timeThread, NULL, writeTime, (void*) &timeFileInfo); 
+            assert( resultInt == 0); 
             
+
             continue;
         }
 
@@ -167,14 +168,16 @@ int main(void) {
 
 
 //open a file and write it the time to it
-void writeTime(struct FileInfo* timeFileInfo){
+void* writeTime(void* param){
+
+struct FileInfo* timeFileInfo =  (struct FileInfo*) param;
 
     time_t t;
     struct tm *tmp;
 
     int lockResult;
 
-    lockResult = pthread_mutex_lock(timeFileInfo->mutex);
+    lockResult = pthread_mutex_lock(&timeFileInfo->mutex);
 
     if ( lockResult == 0 ) {
 
@@ -197,7 +200,7 @@ void writeTime(struct FileInfo* timeFileInfo){
         int fileDesc = open( timeFileInfo->name, O_WRONLY | O_TRUNC | O_CREAT, 0755);
 
         if ( fileDesc < 0 ){
-            fprintf(stderr, "Could not open %s\n", fileName );
+            fprintf(stderr, "Could not open %s\n", timeFileInfo->name );
             perror("Error in writeTime()");
             exit(1);
         }
@@ -206,14 +209,20 @@ void writeTime(struct FileInfo* timeFileInfo){
 
         close( fileDesc );
 
-        pthread_mutex_unlock(timeFileInfo->mutex);
+        pthread_mutex_unlock(&timeFileInfo->mutex);
     }
     else {
         fprintf(stderr, "pthread_mutex_lock(timeFileInfo->mutex) ecnountered error in writeTime()"); 
         exit(lockResult);
     }
-    
+   
+    return param;
+
 }
+
+
+
+
 
 
 //print the current room location and connections
@@ -227,6 +236,10 @@ void printRoom(struct Room* room) {
         i++;
     }
 }
+
+
+
+
 
 
 //  Adds the connections and room type to a Room struct from a string
@@ -274,6 +287,12 @@ void addRoomDetails(char* roomString, struct Room* rooms[], struct Room* room) {
 }
 
 
+
+
+
+
+
+
 //read roomfile and return it as a string
 char* readRoomFile( char* filepath){
 
@@ -311,6 +330,9 @@ char* readRoomFile( char* filepath){
 	
 	return fileString;
 }
+
+
+
 
 
 
